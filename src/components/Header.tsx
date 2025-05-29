@@ -7,7 +7,6 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useWindowDimensions } from 'react-native';
 
 interface HeaderProps {
   title: string;
@@ -28,34 +27,29 @@ const Header: React.FC<HeaderProps> = ({
   showWriteButton = false,
   onWritePress,
 }) => {
-  const { width } = useWindowDimensions();
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* ← Back 버튼 */}
-        {showBackButton ? (
-          <TouchableOpacity onPress={onBackPress} style={styles.iconWrapper}>
+        {/* 좌측 아이콘 */}
+        {showBackButton && (
+          <TouchableOpacity onPress={onBackPress} style={styles.leftIcon}>
             <Image source={require('../assets/back.png')} style={styles.backIcon} />
           </TouchableOpacity>
-        ) : (
-          <View style={styles.iconPlaceholder} />
         )}
 
-        {/* 제목 */}
+        {/* 중앙 제목 */}
         <Text style={styles.title}>{title}</Text>
 
-        {/* 오른쪽 버튼 (완료 또는 글쓰기) */}
-        {showCompleteButton ? (
-          <TouchableOpacity onPress={onCompletePress}>
-            <Text style={styles.complete}>완료</Text>
+        {/* 우측 버튼 */}
+        {showCompleteButton && (
+          <TouchableOpacity onPress={onCompletePress} style={styles.rightButton}>
+            <Text style={styles.rightText}>완료</Text>
           </TouchableOpacity>
-        ) : showWriteButton ? (
-          <TouchableOpacity onPress={onWritePress}>
-            <Text style={styles.write}>글쓰기</Text>
+        )}
+        {showWriteButton && (
+          <TouchableOpacity onPress={onWritePress} style={styles.rightButton}>
+            <Text style={styles.rightText}>글쓰기</Text>
           </TouchableOpacity>
-        ) : (
-          <View style={styles.iconPlaceholder} />
         )}
       </View>
     </SafeAreaView>
@@ -66,37 +60,43 @@ export default Header;
 
 const styles = StyleSheet.create({
   safeArea: {
-    marginRight: 15,
-    marginLeft: 2,
+    backgroundColor: '#fff',
   },
   container: {
-    height: 20,
-    flexDirection: 'row',
+    height: 30,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  iconWrapper: {
-    padding: 6,
-  },
-  iconPlaceholder: {
-    width: 60,
-  },
-  backIcon: {
-    width: 20,
-    height: 20,
-    resizeMode: 'contain',
+    position: 'relative',
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
+    position: 'absolute',
+    left: 0,
+    right: 0,
     textAlign: 'center',
+    pointerEvents: 'none', 
   },
-  complete: {
-    fontSize: 16,
-    color: '#FF5B35',
-    fontWeight: '600',
+  leftIcon: {
+    position: 'absolute',
+    left: 16,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
-  write: {
+  rightButton: {
+    position: 'absolute',
+    right: 16,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
+  backIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
+  },
+  rightText: {
     fontSize: 16,
     color: '#FF5B35',
     fontWeight: '600',
