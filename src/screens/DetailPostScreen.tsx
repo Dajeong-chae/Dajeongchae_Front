@@ -1,3 +1,4 @@
+// ✅ DetailPostScreen.tsx (최종 버전)
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -14,13 +15,11 @@ import {
   TouchableWithoutFeedback,
   Image,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Header from '../components/Header';
+import PoliteModal from '../components/PoliteModal';
 import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 
-type DetailPostRouteProp = RouteProp<
-  { params: { postId: number } },
-  'params'
->;
 
 interface PostDetail {
   id: number;
@@ -39,24 +38,23 @@ interface CommentItem {
   content: string;
   created_at: string;
   updated_at: string;
+  needs_review: boolean;
 }
 
+type DetailPostRouteProp = RouteProp<
+  { params: { postId: number } },
+  'params'
+>;
+
+// 날짜 포맷 유틸
 const formatDate = (iso: string) => {
-  if (!iso) return '';
   const date = new Date(iso);
-  const hh = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
-  return `${hh}:${min}`;
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 };
 
 const formatShortDate = (iso: string) => {
-  if (!iso) return '';
   const date = new Date(iso);
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const hh = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
-  return `${mm}.${dd} ${hh}:${min}`;
+  return `${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 };
 
 const DetailPostScreen = () => {
@@ -68,70 +66,92 @@ const DetailPostScreen = () => {
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [commentText, setCommentText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [politeComment, setPoliteComment] = useState('');
+
+  const COMMENT_KEY = `comments_${postId}`;
 
   const fetchPost = async () => {
-    try {
-      const res = await fetch(`https://sweetspeech-api.onrender.com/posts/${postId}`);
-      const data = await res.json();
-      setPost(data);
-    } catch (err) {
-      console.error('게시글 불러오기 실패:', err);
-    }
+    const res = await fetch(`https://sweetspeech-api.onrender.com/posts/${postId}`);
+    const data = await res.json();
+    setPost(data);
   };
 
   const fetchComments = async () => {
-    try {
-      const res = await fetch(`https://sweetspeech-api.onrender.com/comments/${postId}`);
-      const data = await res.json();
-      setComments(data);
-    } catch (err) {
-      console.error('댓글 불러오기 실패:', err);
-    }
+    const res = await fetch(`https://sweetspeech-api.onrender.com/comments/${postId}`);
+    const data = await res.json();
+    const local = await AsyncStorage.getItem(COMMENT_KEY);
+    const parsed = local ? JSON.parse(local) : [];
+    setComments([...data, ...parsed]);
+  };
+
+  const saveCommentToStorage = async (comment: CommentItem) => {
+    const existing = await AsyncStorage.getItem(COMMENT_KEY);
+    const parsed = existing ? JSON.parse(existing) : [];
+    const updated = [...parsed, comment];
+    await AsyncStorage.setItem(COMMENT_KEY, JSON.stringify(updated));
   };
 
   const handleCommentSubmit = async () => {
     if (!commentText.trim()) return;
+
     try {
       const res = await fetch('https://sweetspeech-api.onrender.com/comments/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ post_id: postId, content: commentText }),
       });
-      if (res.ok) {
+      const data = await res.json();
+      console.log('✅ 응답:', res.status, data);
+
+      if ('polite_comment' in data) {
+        setPoliteComment(data.polite_comment);
+        setModalVisible(true);
+      } else {
         setCommentText('');
         await fetchComments();
-      } else {
-        Alert.alert('댓글 등록 실패', '서버 응답 오류');
       }
     } catch (err) {
-      console.error('댓글 등록 실패:', err);
-      Alert.alert('네트워크 오류', '댓글을 등록할 수 없습니다.');
+      Alert.alert('댓글 등록 실패', '네트워크 오류');
     }
   };
 
+  const handlePoliteConfirm = async () => {
+    setModalVisible(false);
+
+    const newComment: CommentItem = {
+      id: Date.now(),
+      post_id: postId,
+      content: politeComment,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      needs_review: false,
+    };
+
+    setComments((prev) => [...prev, newComment]);
+    await saveCommentToStorage(newComment);
+    setCommentText('');
+  };
+
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       setLoading(true);
       await fetchPost();
       await fetchComments();
       setLoading(false);
-    };
-    load();
+    })();
   }, [postId]);
 
-  if (loading || !post) {
-    return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;
-  }
+  if (loading || !post) return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
           <Header title="전체 게시판" showBackButton onBackPress={() => navigation.goBack()} />
+
           <ScrollView contentContainerStyle={styles.contentWrapper} keyboardShouldPersistTaps="handled">
+            {/* 게시글 영역 */}
             <View style={styles.postHeaderRow}>
               <Image source={require('../assets/user_icon.png')} style={styles.avatar} />
               <View style={styles.postTextColumn}>
@@ -140,23 +160,17 @@ const DetailPostScreen = () => {
               </View>
             </View>
             <Text style={styles.title}>{post.title}</Text>
-
-            {post.image_url && (
-              <Image
-                source={{ uri: post.image_url }}
-                style={styles.postImage}
-                resizeMode="cover"
-              />
-            )}
-
+            {post.image_url && <Image source={{ uri: post.image_url }} style={styles.postImage} resizeMode="cover" />}            
             <Text style={styles.content}>{post.content}</Text>
 
+            {/* 댓글 영역 */}
             <View style={styles.separator} />
             <View style={styles.commentHeaderContainer}>
               <Image source={require('../assets/chat_icon.png')} style={styles.chatIcon} resizeMode="contain" />
               <Text style={styles.commentHeader}>댓글 {comments.length}</Text>
             </View>
             <View style={styles.separator} />
+
             {comments.length === 0 ? (
               <Text style={{ textAlign: 'center', paddingVertical: 16, color: '#999' }}>
                 첫 댓글을 남겨주세요!
@@ -168,7 +182,13 @@ const DetailPostScreen = () => {
                     <Image source={require('../assets/user_icon.png')} style={styles.avatar} />
                     <View style={styles.commentTextColumn}>
                       <Text style={styles.commentNickname}>익명{idx + 1}</Text>
-                      <Text style={styles.commentContent}>{comment.content}</Text>
+                      {comment.needs_review ? (
+                        <>
+                          <Text style={styles.commentContentReview}>⚠️ {comment.content}</Text>
+                        </>
+                      ) : (
+                        <Text style={styles.commentContent}>{comment.content}</Text>
+                      )}
                     </View>
                     <Text style={styles.commentDate}>{formatDate(comment.created_at)}</Text>
                   </View>
@@ -177,6 +197,8 @@ const DetailPostScreen = () => {
               ))
             )}
           </ScrollView>
+
+          {/* 댓글 입력창 */}
           <View style={styles.commentInputBar}>
             <TextInput
               style={styles.input}
@@ -190,11 +212,22 @@ const DetailPostScreen = () => {
               <Text style={styles.sendButtonText}>입력</Text>
             </TouchableOpacity>
           </View>
+
+          <PoliteModal
+            visible={modalVisible}
+            politeComment={politeComment}
+            onCancel={() => setModalVisible(false)}
+            onConfirm={handlePoliteConfirm}
+          />
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 };
+
+export default DetailPostScreen;
+
+// ⚙️ Styles 생략: 기존 코드 유지
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'white' },
@@ -205,12 +238,7 @@ const styles = StyleSheet.create({
   author: { fontSize: 12, fontWeight: '600', color: '#000' },
   dateBelow: { fontSize: 12, color: '#999', marginTop: 2 },
   title: { fontSize: 20, fontWeight: '500', marginBottom: 10 },
-  postImage: {
-    width: '100%',
-    height: 220,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
+  postImage: { width: '100%', height: 220, borderRadius: 8, marginBottom: 12 },
   content: { fontSize: 14, lineHeight: 20, color: '#333' },
   separator: { height: 1, backgroundColor: '#E0E0E0', width: '100%', marginVertical: 12 },
   commentHeaderContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
@@ -222,35 +250,18 @@ const styles = StyleSheet.create({
   commentNickname: { fontSize: 14, fontWeight: '700', marginBottom: 4 },
   commentDate: { fontSize: 12, color: '#999', alignSelf: 'flex-end' },
   commentContent: { fontSize: 14, lineHeight: 20, color: '#333' },
+  commentContentReview: { fontSize: 14, lineHeight: 20, color: '#FF5B35', fontStyle: 'italic'},
   commentInputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 13,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16,
+    paddingVertical: 12, borderTopWidth: 1, borderColor: '#ddd', marginBottom: 13,
   },
   input: {
-    flex: 1,
-    borderColor: '#ccc',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    marginRight: 10,
-    color: '#000',
-    backgroundColor: '#F4F4F4',
+    flex: 1, borderColor: '#ccc', borderRadius: 20, paddingHorizontal: 14,
+    paddingVertical: 10, fontSize: 14, marginRight: 10, color: '#000', backgroundColor: '#F4F4F4',
   },
   sendButton: {
-    backgroundColor: '#FF5B35',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#FF5B35', paddingVertical: 10, paddingHorizontal: 16,
+    borderRadius: 15, justifyContent: 'center', alignItems: 'center',
   },
   sendButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });
-
-export default DetailPostScreen;
