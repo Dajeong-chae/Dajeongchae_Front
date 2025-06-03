@@ -79,10 +79,16 @@ const DetailPostScreen = () => {
 
   const fetchComments = async () => {
     const res = await fetch(`https://sweetspeech-api.onrender.com/comments/${postId}`);
-    const data = await res.json();
+    const data = await res.json(); // 서버 댓글
     const local = await AsyncStorage.getItem(COMMENT_KEY);
-    const parsed = local ? JSON.parse(local) : [];
-    setComments([...data, ...parsed]);
+    const parsed = local ? JSON.parse(local) : []; // 로컬 댓글
+
+    const all = [...data, ...parsed];
+
+    // 🔽 시간순 정렬 (오래된 댓글이 위로)
+    all.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    setComments(all);
   };
 
   const saveCommentToStorage = async (comment: CommentItem) => {
